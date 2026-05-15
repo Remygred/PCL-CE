@@ -1239,8 +1239,17 @@ public static class ModLaunch
                        .GetAwaiter()
                        .GetResult())
             {
-                response.EnsureSuccessStatusCode();
                 Result = response.AsString();
+                if (!response.IsSuccessStatusCode)
+                {
+                    if (response.StatusCode == HttpStatusCode.Forbidden && IsMsLoginInvalidAppRegistration(Result))
+                    {
+                        ModBase.Log($"正版验证 Step 4 汇报 403：Microsoft 应用注册无效。响应：{Result}", ModBase.LogLevel.Developer);
+                        throw new Exception("$当前启动器的微软登录应用注册无效。" + "\r\n" + "如果你正在使用自行构建的版本，请改用官方发布版，或在构建时配置有效的 Microsoft 应用注册。");
+                    }
+
+                    response.EnsureSuccessStatusCode();
+                }
             }
         }
         catch (HttpRequestException ex)
@@ -1283,6 +1292,23 @@ public static class ModLaunch
         if (string.IsNullOrWhiteSpace(AccessToken))
             throw new Exception("获取到的 Minecraft AccessToken 为空，登录流程异常！");
         return AccessToken;
+    }
+
+    private static bool IsMsLoginInvalidAppRegistration(string result)
+    {
+        if (string.IsNullOrWhiteSpace(result))
+            return false;
+        try
+        {
+            var resultJson = (JObject)ModBase.GetJson(result);
+            return resultJson["errorMessage"]?.ToString()
+                .Contains("Invalid app registration", StringComparison.OrdinalIgnoreCase) == true;
+        }
+        catch (Exception ex)
+        {
+            ModBase.Log(ex, $"正版验证 Step 4 错误响应解析失败：{result}", ModBase.LogLevel.Developer);
+            return false;
+        }
     }
 
     /// <summary>
